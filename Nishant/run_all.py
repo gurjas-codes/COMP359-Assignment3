@@ -32,6 +32,20 @@ def run_script(script_path, description):
         print(f"Error running {script_path}: {e}")
         return False
 
+def verify_outputs(output_files):
+    print_header("VERIFYING OUTPUTS")
+    
+    all_exist = True
+    for file_path in output_files:
+        if os.path.exists(file_path):
+            size = os.path.getsize(file_path)
+            print(f"✓ {file_path} ({size} bytes)")
+        else:
+            print(f"✗ {file_path} not found")
+            all_exist = False
+    
+    return all_exist
+
 def main():
     print_header("LINEAR PROGRAMMING SIMPLEX VISUALIZATION")
     print("Running all components...")
@@ -51,6 +65,16 @@ def main():
             run_script(script_path, description)
         else:
             print(f"Warning: {script_path} not found")
+    
+    output_files = [
+        'bryan/test_plot.png',
+        'deep/all_steps_combined.png',
+        'Jovan/solution_plot.png',
+        'japneet/solution_summary.txt',
+        'Gurjas/pca_visualization.png',
+    ]
+    
+    verify_outputs(output_files)
     
     elapsed = time.time() - start_time
     print_header(f"COMPLETE - Elapsed time: {elapsed:.2f} seconds")

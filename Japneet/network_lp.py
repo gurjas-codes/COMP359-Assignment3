@@ -27,3 +27,57 @@ def download_and_extract():
         print("File already extracted.")
 
     return MPS_PATH
+
+def summarize_mps(mps_path):
+    print("\n" + "="*50)
+    print("MPS FILE SUMMARY")
+    print("="*50)
+
+    with open(mps_path, 'r') as f:
+        lines = f.readlines()
+
+    print(f"Total lines: {len(lines)}")
+
+    sections = ['ROWS', 'COLUMNS', 'RHS', 'BOUNDS']
+    current_section = None
+    section_data = {s: [] for s in sections}
+
+    for line in lines[:1000]:  # sample first 1000 lines
+        line = line.strip()
+
+        if line in sections:
+            current_section = line
+            continue
+
+        if current_section:
+            section_data[current_section].append(line)
+
+    # Constraints
+    constraints = section_data['ROWS']
+    n_constraints = len(constraints)
+
+    # Variables (unique)
+    variables = set()
+    for line in section_data['COLUMNS']:
+        parts = line.split()
+        if len(parts) > 0:
+            variables.add(parts[0])
+
+    n_variables = len(variables)
+
+    print(f"Constraints: {n_constraints}")
+    print(f"Variables (unique): {n_variables}")
+
+    print("\nSample constraints:")
+    for c in constraints[:5]:
+        print(" ", c)
+
+    print("\nSample variables:")
+    for v in list(variables)[:5]:
+        print(" ", v)
+
+    return n_variables, n_constraints
+    
+    
+
+

@@ -1,6 +1,7 @@
 import os
 import bz2
 import urllib.request
+print("RUNNING FILE")
 
 DATA_DIR = "Japneet/data"
 BZ2_PATH = os.path.join(DATA_DIR, "long15.mps.bz2")
@@ -77,7 +78,38 @@ def summarize_mps(mps_path):
         print(" ", v)
 
     return n_variables, n_constraints
-    
-    
 
+def solve_lp(mps_path):
+    print("\n" + "="*50)
+    print("SOLVING LP")
+    print("="*50)
 
+    start = time.time()
+
+    try:
+        prob = pulp.LpProblem.fromMPS(mps_path)
+    except Exception as e:
+        print("Error reading MPS:", e)
+        return None, None
+
+    print(f"Loaded in {time.time() - start:.2f}s")
+
+    solve_start = time.time()
+
+    solver = pulp.PULP_CBC_CMD(msg=True, timeLimit=60)
+    prob.solve(solver)
+
+    solve_time = time.time() - solve_start
+
+    status = pulp.LpStatus[prob.status]
+    objective = pulp.value(prob.objective)
+
+    result = {
+        "status": status,
+        "objective": objective,
+        "solve_time": solve_time,
+        "n_variables": len(prob.variables()),
+        "n_constraints": len(prob.constraints)
+    }
+
+    return result, prob

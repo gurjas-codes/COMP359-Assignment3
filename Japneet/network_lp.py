@@ -113,3 +113,44 @@ def solve_lp(mps_path):
     }
 
     return result, prob
+
+def save_results(result, n_vars, n_cons):
+    print("\n" + "="*50)
+    print("RESULT SUMMARY")
+    print("="*50)
+
+    if result is None:
+        print("No solution found.")
+        return
+
+    obj = result["objective"] if result["objective"] is not None else 0
+
+    print(f"Status: {result['status']}")
+    print(f"Objective: {obj:.4f}")
+    print(f"Solve Time: {result['solve_time']:.2f}s")
+    print(f"Variables: {result['n_variables']}")
+    print(f"Constraints: {result['n_constraints']}")
+
+    with open(OUTPUT_FILE, "w") as f:
+        f.write("NETWORK LP SOLUTION SUMMARY\n")
+        f.write("="*40 + "\n")
+        f.write(f"Status: {result['status']}\n")
+        f.write(f"Objective: {obj:.4f}\n")
+        f.write(f"Solve Time: {result['solve_time']:.2f}s\n")
+        f.write(f"Variables: {result['n_variables']}\n")
+        f.write(f"Constraints: {result['n_constraints']}\n")
+
+    print("\nSaved to japneet/solution_summary.txt")
+
+def main():
+    mps_path = download_and_extract()
+
+    n_vars, n_cons = summarize_mps(mps_path)
+
+    result, prob = solve_lp(mps_path)
+
+    save_results(result, n_vars, n_cons)
+
+
+if __name__ == "__main__":
+    main()

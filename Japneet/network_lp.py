@@ -1,11 +1,16 @@
 import os
 import bz2
 import urllib.request
+import time
+import subprocess
+
 print("RUNNING FILE")
 
 DATA_DIR = "Japneet/data"
 BZ2_PATH = os.path.join(DATA_DIR, "long15.mps.bz2")
 MPS_PATH = os.path.join(DATA_DIR, "long15.mps")
+CBC_OUTPUT_FILE = "cbc_solution.txt"
+SUMMARY_FILE = "solution_summary.txt"
 
 def download_and_extract():
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -43,13 +48,11 @@ def summarize_mps(mps_path):
     current_section = None
     section_data = {s: [] for s in sections}
 
-    for line in lines[:1000]:  # sample first 1000 lines
+    for line in lines:
         line = line.strip()
-
         if line in sections:
             current_section = line
             continue
-
         if current_section:
             section_data[current_section].append(line)
 
@@ -61,7 +64,7 @@ def summarize_mps(mps_path):
     variables = set()
     for line in section_data['COLUMNS']:
         parts = line.split()
-        if len(parts) > 0:
+        if len(parts) > 1:
             variables.add(parts[0])
 
     n_variables = len(variables)
@@ -79,37 +82,85 @@ def summarize_mps(mps_path):
 
     return n_variables, n_constraints
 
-def solve_lp(mps_path):
+def solve_lp_cbc(mps_path):
     print("\n" + "="*50)
-    print("SOLVING LP")
+    print("SOLVING LP USING CBC")
     print("="*50)
 
-    start = time.time()
+    start_time = time.time()
 
+    # Run CBC solver directly
     try:
-        prob = pulp.LpProblem.fromMPS(mps_path)
-    except Exception as e:
-        print("Error reading MPS:", e)
-        return None, None
+        subprocess.run(
+            ["cbc", mps_path, "solve", "solu", CBC_OUTPUT_FILE],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+    except FileNotFoundError:
+        print("CBC solver not found. Install it or add it to PATH.")
+        return None
+    except subprocess.CalledProcessError as e:
+        print("Error running CBC:", e)
+        return None
 
-    print(f"Loaded in {time.time() - start:.2f}s")
+    solve_time = time.time() - start_time
+    print(f"Solved in {solve_time:.2f}s")
 
-    solve_start = time.time()
-
-    solver = pulp.PULP_CBC_CMD(msg=True, timeLimit=60)
-    prob.solve(solver)
-
-    solve_time = time.time() - solve_start
-
-    status = pulp.LpStatus[prob.status]
-    objective = pulp.value(prob.objective)
+    # Read objective value from CBC output
+    objective = None
+    try:
+        with open(CBC_OUTPUT_FILE, "r") as f:
+            for line in f:
+                if "Objective value" in line:
+                    objective = float(line.split()[-1])
+                    break
+    except:
+        print("Could not read CBC solution file.")
 
     result = {
-        "status": status,
+        "status": "Solved" if objective is not None else "Unknown",
         "objective": objective,
         "solve_time": solve_time,
-        "n_variables": len(prob.variables()),
-        "n_constraints": len(prob.constraints)
+        "n_variables": None,
+        "n_constraints": None
     }
 
-    return result, prob
+    return result
+
+def save_results(result, n_vars, n_cons):
+    print("\n" + "="*50)
+    print("RESULT SUMMARY")
+    print("="*50)
+
+    if result is None:
+        print("No solution found.")
+        return
+
+    obj = result["objective"] if result["objective"] is not None else 0
+
+    print(f"Status: {result['status']}")
+    print(f"Objective: {obj:.4f}")
+    print(f"Solve Time: {result['solve_time']:.2f}s")
+    print(f"Constraints: {n_cons}")
+    print(f"Variables: {n_vars}")
+
+    with open(SUMMARY_FILE, "w") as f:
+        f.write("NETWORK LP SOLUTION SUMMARY\n")
+        f.write("="*40 + "\n")
+        f.write(f"Status: {result['status']}\n")
+        f.write(f"Objective: {obj:.4f}\n")
+        f.write(f"Solve Time: {result['solve_time']:.2f}s\n")
+        f.write(f"Variables: {n_vars}\n")
+        f.write(f"Constraints: {n_cons}\n")
+
+    print(f"\nSaved to {SUMMARY_FILE}")
+
+def main():
+    mps_path = download_and_extract()
+    n_vars, n_cons = summarize_mps(mps_path)
+    result = solve_lp_cbc(mps_path)
+    save_results(result, n_vars, n_cons)
+
+if __name__ == "__main__":
+    main()

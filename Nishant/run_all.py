@@ -9,7 +9,7 @@ def print_header(title):
     print("="*60)
 
 def run_script(script_path, description):
-    
+
     print_header(f"Running: {description}")
     
     try:
@@ -41,19 +41,67 @@ def run_script(script_path, description):
         print(f"Error running {script_path}: {e}")
         return False
 
-def verify_outputs(output_files):
+def verify_outputs():
+
     print_header("VERIFYING OUTPUTS")
     
-    success_count = 0
-    for file_path in output_files:
+    output_files = {
+        # Bryan
+        'bryan/test_plot.png': 'Bryan constraint test plot',
+        
+        # Deep
+        'deep/simplex_step_1.png': 'Deep simplex step 1',
+        'deep/simplex_step_2.png': 'Deep simplex step 2',
+        'deep/simplex_step_3.png': 'Deep simplex step 3',
+        'deep/all_steps_combined.png': 'Deep combined steps',
+        
+        # Jovan
+        'Jovan/solution_plot.png': 'Jovan LP solution plot',
+        
+        # Japneet
+        'japneet/solution_summary.txt': 'Japneet network LP summary',
+        
+        # Gurjas
+        'Gurjas/pca_visualization.png': 'Gurjas PCA visualization',
+        'Gurjas/parallel_coordinates.png': 'Gurjas parallel coordinates',
+        'Gurjas/correlation_heatmap.png': 'Gurjas correlation heatmap',
+    }
+    
+    found_files = []
+    missing_files = []
+    
+    print("\nChecking output files...\n")
+    
+    for file_path, description in output_files.items():
         if os.path.exists(file_path):
             size = os.path.getsize(file_path)
-            print(f"✓ {file_path} ({size} bytes)")
-            success_count += 1
+            print(f"✓ {file_path} - {description} ({size} bytes)")
+            found_files.append(file_path)
         else:
-            print(f"✗ {file_path} not found")
+            print(f"✗ {file_path} - {description} NOT FOUND")
+            missing_files.append(file_path)
     
-    return success_count, len(output_files)
+    return len(found_files), len(output_files), found_files, missing_files
+
+def print_summary(script_success, output_success, output_total, missing_files, elapsed):
+
+    print_header("EXECUTION SUMMARY")
+    
+    print("\nScript Execution Results:")
+    for description, success in script_success:
+        status = "✓" if success else "✗"
+        print(f"  {status} {description}")
+    
+    print(f"\nOutput Files: {output_success}/{output_total} found")
+    
+    if missing_files:
+        print("\nMissing Files (may need to run scripts again):")
+        for file_path in missing_files:
+            print(f"  - {file_path}")
+    
+    print_header(f"COMPLETE - Elapsed time: {elapsed:.2f} seconds")
+    print("\nNote: Some files may be created by subsequent runs or require")
+    print("      dependencies to be installed. Run 'pip install -r requirements.txt'")
 
 def main():
     print_header("LINEAR PROGRAMMING SIMPLEX VISUALIZATION")
@@ -71,6 +119,7 @@ def main():
         ('gurjas/higher_dim_viz.py', "Gurjas Higher-Dimensional Visualization"),
     ]
     
+    
     script_success = []
     for script_path, description in scripts:
         if os.path.exists(script_path):
@@ -80,26 +129,11 @@ def main():
             print(f"Warning: {script_path} not found")
             script_success.append((description, False))
     
-    output_files = [
-        'bryan/test_plot.png',
-        'deep/all_steps_combined.png',
-        'Jovan/solution_plot.png',
-        'japneet/solution_summary.txt',
-        'Gurjas/pca_visualization.png',
-    ]
+  
+    output_success, output_total, found_files, missing_files = verify_outputs()
     
-    output_success, output_total = verify_outputs(output_files)
-    
-    print_header("EXECUTION SUMMARY")
-    print("\nScript Execution Results:")
-    for description, success in script_success:
-        status = "✓" if success else "✗"
-        print(f"  {status} {description}")
-    
-    print(f"\nOutput Files: {output_success}/{output_total} found")
-    
-    elapsed = time.time() - start_time
-    print_header(f"COMPLETE - Elapsed time: {elapsed:.2f} seconds")
+  
+    print_summary(script_success, output_success, output_total, missing_files, time.time() - start_time)
 
 if __name__ == "__main__":
     main()

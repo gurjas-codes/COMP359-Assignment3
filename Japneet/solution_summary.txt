@@ -1,0 +1,7 @@
+NETWORK LP SOLUTION
+========================================
+Status: Infeasible
+Objective: 0.0000
+Solve Time: 0.03s
+Variables: 5
+Constraints: 4

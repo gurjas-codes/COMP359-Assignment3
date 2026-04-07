@@ -1,149 +1,242 @@
+"""
+Simple, readable walk-through of the 2D simplex method for a class project.
+Solves a tiny LP, logs each basic feasible solution (BFS), and saves plots that
+show how the algorithm walks across the feasible region.
+"""
+
 from __future__ import annotations
 
-from pathlib import Path
+import os
+from dataclasses import dataclass
+from typing import List, Sequence, Tuple
 
+import matplotlib.pyplot as plt
 import numpy as np
 
-import plot_all
-from Algo_2d import LinearProgram, plot_step, solve_simplex_with_trace
+# Problem statement (keep it close to the code we operate on).
+# Maximize z = 3x + 5y
+# subject to: 2x + y <= 8,   x + 2y <= 10,   x >= 0, y >= 0
 
 
-MAX_INEQUALITIES = 8
+@dataclass(frozen=True)
+class LinearProgram:
+    """Tiny LP in max form: maximize c^T x subject to Ax <= b."""
+
+    A: np.ndarray
+    b: np.ndarray
+    c: np.ndarray
 
 
-def prompt_int(prompt: str, minimum: int, maximum: int) -> int:
-    """Read an integer inside a closed interval."""
-
-    while True:
-        raw = input(prompt).strip()
-        try:
-            value = int(raw)
-        except ValueError:
-            print("Please enter a whole number.")
-            continue
-        if minimum <= value <= maximum:
-            return value
-        print(f"Please enter a value from {minimum} to {maximum}.")
+PROBLEM = LinearProgram(
+    # Demo LP used by main() to generate the example simplex walk-through.
+    A=np.array([[2.0, 1.0], [1.0, 2.0]], dtype=float),
+    b=np.array([8.0, 10.0], dtype=float),
+    c=np.array([3.0, 5.0], dtype=float),
+)
 
 
-def prompt_float(prompt: str) -> float:
-    """Read a floating-point number."""
+def solve_simplex_with_trace(lp: LinearProgram) -> List[Tuple[float, float]]:
+    """
+    Run the tableau simplex method and record each BFS for a 2D max problem.
 
-    while True:
-        raw = input(prompt).strip()
-        try:
-            return float(raw)
-        except ValueError:
-            print("Please enter a valid number.")
+    The LP must be in standard form:
+    maximize c^T x subject to A x <= b, b >= 0, x >= 0, y >= 0.
+    """
+
+    if lp.A.ndim != 2 or lp.A.shape[1] != 2:
+        raise ValueError("solve_simplex_with_trace only supports 2D problems in x and y.")
+    if lp.A.shape[0] == 0:
+        raise ValueError("At least one inequality is required.")
+    if lp.A.shape[0] > 8:
+        raise ValueError("This solver supports at most 8 user-supplied inequalities.")
+    if np.any(lp.b < -1e-9):
+        raise ValueError("All right-hand sides must be non-negative for this simplex setup.")
+
+    num_constraints = int(lp.A.shape[0])
+    num_vars = 2 + num_constraints  # x, y, and one slack per inequality
+    # Allocate one extra column for the RHS values.
+    tableau = np.zeros((num_constraints + 1, num_vars + 1), dtype=float)
+    tableau[:num_constraints, :2] = lp.A
+    tableau[:num_constraints, 2 : 2 + num_constraints] = np.eye(num_constraints)
+    tableau[:num_constraints, -1] = lp.b
+    # The objective row stores -c so a negative entry signals an improving move.
+    tableau[-1, :2] = -lp.c
+    # Start with the slack variables as the basic variables.
+    basis = list(range(2, 2 + num_constraints))
+
+    def current_xy() -> Tuple[float, float]:
+        """Read the basic variables out of the tableau into (x, y)."""
+        solution = np.zeros(num_vars)
+        for row, col in enumerate(basis):
+            solution[col] = tableau[row, -1]
+        return float(solution[0]), float(solution[1])
+
+    bfs_trace: List[Tuple[float, float]] = [current_xy()]
+
+    max_iter = 20
+    for _ in range(max_iter):
+        obj_row = tableau[-1, :num_vars]
+
+        # Entering variable: most negative reduced cost (maximization).
+        if obj_row.min() >= -1e-9:
+            break  # optimal
+        pivot_col = int(obj_row.argmin())
+
+        # Leaving variable: minimum ratio test RHS / pivot column.
+        ratios: List[float] = []
+        for r in range(num_constraints):
+            coeff = tableau[r, pivot_col]
+            rhs = tableau[r, -1]
+            ratios.append(rhs / coeff if coeff > 1e-9 else np.inf)
+
+        pivot_row = int(np.argmin(ratios))
+        if not np.isfinite(ratios[pivot_row]):
+            break  # unbounded in this direction
+
+        pivot_val = tableau[pivot_row, pivot_col]
+        tableau[pivot_row, :] /= pivot_val
+        for r in range(num_constraints + 1):
+            if r != pivot_row:
+                tableau[r, :] -= tableau[r, pivot_col] * tableau[pivot_row, :]
+
+        basis[pivot_row] = pivot_col
+        bfs_trace.append(current_xy())
+
+    return bfs_trace
 
 
-def read_linear_program() -> LinearProgram:
-    """Collect a 2D maximization problem in standard <= form from the user."""
+def build_plot_constraints(lp: LinearProgram) -> Tuple[np.ndarray, np.ndarray]:
+    """Append x >= 0 and y >= 0 as -x <= 0 and -y <= 0 for geometry checks."""
 
-    print("2D simplex solver")
-    print("Variables are fixed as x and y.")
-    print("Enter each inequality in the form: ax + by <= c")
-    print("x >= 0 and y >= 0 are included automatically.")
-    print()
+    extra_a = np.array([[-1.0, 0.0], [0.0, -1.0]], dtype=float)
+    extra_b = np.array([0.0, 0.0], dtype=float)
+    # Nonnegativity is added here for geometry only; the simplex tableau already assumes it.
+    full_a = np.vstack([lp.A, extra_a])
+    full_b = np.concatenate([lp.b, extra_b])
+    return full_a, full_b
 
-    constraint_count = prompt_int(
-        f"How many inequalities do you want to enter? (1-{MAX_INEQUALITIES}): ",
-        1,
-        MAX_INEQUALITIES,
+
+def compute_feasible_vertices(lp: LinearProgram) -> List[Tuple[float, float]]:
+    """Enumerate feasible vertices by intersecting every pair of boundary lines."""
+
+    full_a, full_b = build_plot_constraints(lp)
+    vertices: List[Tuple[float, float]] = []
+
+    for i in range(len(full_a)):
+        for j in range(i + 1, len(full_a)):
+            matrix = np.array([full_a[i], full_a[j]], dtype=float)
+            if abs(np.linalg.det(matrix)) < 1e-9:
+                continue
+            rhs = np.array([full_b[i], full_b[j]], dtype=float)
+            point = np.linalg.solve(matrix, rhs)
+            if np.all(full_a @ point <= full_b + 1e-8):
+                candidate = (float(point[0]), float(point[1]))
+                if not any(np.allclose(candidate, existing, atol=1e-7) for existing in vertices):
+                    vertices.append(candidate)
+
+    return vertices
+
+
+def order_polygon(points: Sequence[Tuple[float, float]]) -> np.ndarray:
+    """Sort polygon vertices counterclockwise for plotting."""
+
+    pts = np.array(points, dtype=float)
+    center = pts.mean(axis=0)
+    angles = np.arctan2(pts[:, 1] - center[1], pts[:, 0] - center[0])
+    return pts[np.argsort(angles)]
+
+
+def plot_step(
+    lp: LinearProgram,
+    path: Sequence[Tuple[float, float]],
+    step_index: int,
+    title: str,
+    outfile: str,
+) -> None:
+    """Plot feasible region plus simplex path up to a step, then save as PNG."""
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    vertices = compute_feasible_vertices(lp)
+    if not vertices:
+        raise ValueError("No feasible region found for the supplied inequalities.")
+
+    polygon = order_polygon(vertices)
+    ax.fill(
+        polygon[:, 0],
+        polygon[:, 1],
+        color="steelblue",
+        alpha=0.25,
+        label="Feasible region",
     )
 
-    print()
-    print("Objective function: maximize z = p*x + q*y")
-    objective_x = prompt_float("Enter coefficient p for x: ")
-    objective_y = prompt_float("Enter coefficient q for y: ")
+    max_x = max(max(point[0] for point in vertices), max(point[0] for point in path), 1.0)
+    max_y = max(max(point[1] for point in vertices), max(point[1] for point in path), 1.0)
+    x_line = np.linspace(0, max_x * 1.2 + 1.0, 400)
 
-    rows = []
-    rhs_values = []
-
-    # Store the inequalities as A x <= b so the simplex helper can use them directly.
-    for index in range(constraint_count):
-        print()
-        print(f"Inequality {index + 1}: a*x + b*y <= c")
-        a_coeff = prompt_float("Coefficient a for x: ")
-        b_coeff = prompt_float("Coefficient b for y: ")
-        rhs = prompt_float("Right-hand side c: ")
-        if rhs < 0:
-            raise ValueError(
-                "This program requires each right-hand side c to be non-negative."
+    styles = ["k-", "k--", "k-.", "k:", "b-", "b--", "g-", "g--"]
+    for index, (row, rhs) in enumerate(zip(lp.A, lp.b)):
+        a_coeff, b_coeff = row
+        style = styles[index % len(styles)]
+        # Handle the common nonvertical case as y = (rhs - ax) / b.
+        if abs(b_coeff) > 1e-9:
+            y_line = (rhs - a_coeff * x_line) / b_coeff
+            mask = y_line >= -0.25
+            ax.plot(
+                x_line[mask],
+                y_line[mask],
+                style,
+                lw=1,
+                label=rf"${a_coeff:g}x + {b_coeff:g}y = {rhs:g}$",
             )
-        rows.append([a_coeff, b_coeff])
-        rhs_values.append(rhs)
+        elif abs(a_coeff) > 1e-9:
+            # Vertical boundaries are drawn separately because they cannot be written as y = f(x).
+            x_value = rhs / a_coeff
+            ax.axvline(x=x_value, linestyle=style[-1], color=style[0], lw=1, label=rf"${a_coeff:g}x = {rhs:g}$")
 
-    return LinearProgram(
-        A=np.array(rows, dtype=float),
-        b=np.array(rhs_values, dtype=float),
-        c=np.array([objective_x, objective_y], dtype=float),
-    )
+    path_arr = np.array(path)
+    ax.plot(path_arr[:, 0], path_arr[:, 1], "o-", color="darkorange", ms=10, lw=2, label="Simplex path")
 
+    cx, cy = path[-1]
+    ax.plot(cx, cy, "s", color="crimson", ms=12, label="Current BFS")
 
-def clear_old_outputs(out_dir: Path) -> None:
-    """Remove old simplex images so the combined plot only uses the current run."""
+    for idx, (px, py) in enumerate(path):
+        ax.annotate(str(idx), (px, py), textcoords="offset points", xytext=(6, 6), fontsize=11)
 
-    for image_path in out_dir.glob("simplex_2d_step_*.png"):
-        try:
-            image_path.unlink(missing_ok=True)
-        except PermissionError:
-            # Ignore locked files and continue generating the current run's images.
-            pass
-    try:
-        (out_dir / "simplex_2d_all.png").unlink(missing_ok=True)
-    except PermissionError:
-        pass
+    ax.set_xlim(-0.2, max_x * 1.2 + 1.0)
+    ax.set_ylim(-0.2, max_y * 1.2 + 1.0)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel(r"$x$")
+    ax.set_ylabel(r"$y$")
+    ax.set_title(f"Simplex step {step_index + 1}: {title}")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="upper right", fontsize=9)
 
-
-def format_objective(lp: LinearProgram, point: tuple[float, float]) -> float:
-    """Evaluate z = c^T x at a point."""
-
-    return float(lp.c[0] * point[0] + lp.c[1] * point[1])
+    fig.tight_layout()
+    fig.savefig(outfile, dpi=150)
+    plt.close(fig)
 
 
 def main() -> None:
-    try:
-        lp = read_linear_program()
-        trace = solve_simplex_with_trace(lp)
-    except ValueError as exc:
-        print(f"Input error: {exc}")
-        return
+    """Main function to run simplex and generate plots"""
+    trace = solve_simplex_with_trace(PROBLEM)
+    out_dir = os.path.dirname(os.path.abspath(__file__))
 
-    out_dir = Path(__file__).resolve().parent
-    clear_old_outputs(out_dir)
-    current_images = []
+    labels = [
+        "initial BFS (x,y)=(0,0)",
+        "after 1st pivot",
+        "optimal vertex",
+    ]
 
-    # Save one image for each visited basic feasible solution.
-    for step_index in range(len(trace)):
-        partial_path = trace[: step_index + 1]
-        if step_index == 0:
-            title = "initial BFS"
-        elif step_index == len(trace) - 1:
-            title = "optimal vertex"
-        else:
-            title = f"pivot {step_index}"
-
-        outfile = out_dir / f"simplex_2d_step_{step_index + 1}.png"
-        plot_step(lp, partial_path, step_index, title, str(outfile))
-        current_images.append(outfile)
+    for step in range(len(trace)):
+        # Slice the trace so each image shows the path discovered up to that iteration.
+        partial_path = trace[: step + 1]
+        outfile = os.path.join(out_dir, f"simplex_2d_step_{step + 1}.png")
+        step_title = labels[step] if step < len(labels) else f"iteration {step}"
+        plot_step(PROBLEM, partial_path, step, step_title, outfile)
         print(f"Wrote {outfile}")
 
-    # Combine the per-step images into one summary figure.
-    plot_all.combine_images(current_images, out_dir / "simplex_2d_all.png")
-
-    best_point = trace[-1]
-    best_value = format_objective(lp, best_point)
-
-    print()
-    print("Simplex path:")
-    for index, (x_value, y_value) in enumerate(trace):
-        print(f"Step {index}: x = {x_value:.4f}, y = {y_value:.4f}")
-
-    print()
-    print(f"Optimal solution: x = {best_point[0]:.4f}, y = {best_point[1]:.4f}")
-    print(f"Maximum objective value: z = {best_value:.4f}")
-    print(f"Combined plot: {out_dir / 'simplex_2d_all.png'}")
+    print("BFS sequence (x, y):", trace)
 
 
 if __name__ == "__main__":

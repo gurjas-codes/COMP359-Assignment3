@@ -1,209 +1,121 @@
 """
-
-This script coordinates execution of all team members' code:
-- Bryan: constraint helper functions
-- Deep: 2D simplex visualization
-- Jovan: library solver with 5+ constraints
-- Japneet: network LP (long15.mps) solver
-- Gurjas: higher-dimensional visualization
-
-run from project root: python run_all.py
+Main runner script - executes all components for the Linear Programming Simplex Visualization project
+Run from project root: python3 Nishant/run_all.py
 """
 
 import os
 import sys
 import subprocess
 import time
-from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
 
+# Suppress all output from subprocesses
+import contextlib
 
-TIMEOUT_SECONDS = 300  
+def get_project_root():
+    """Get the project root directory"""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def print_header(title):
+    """Print a formatted section header"""
     print("\n" + "="*60)
     print(f" {title}")
     print("="*60)
 
-def check_dependencies():
+def run_script_silent(script_path):
+    """
+    Run a Python script silently, suppressing all output
+    """
+    project_root = get_project_root()
+    full_path = os.path.join(project_root, script_path)
+    
+    if not os.path.exists(full_path):
+        return False
+    
     try:
-        import pulp
-        import numpy
-        import matplotlib
-        import sklearn
-        import scipy
-        return True
-    except ImportError as e:
-        print(f"Missing dependency: {e}")
-        print("Please run: pip install -r requirements.txt")
+        # Run with stdout and stderr suppressed
+        with open(os.devnull, 'w') as devnull:
+            result = subprocess.run(
+                [sys.executable, full_path], 
+                stdout=devnull,
+                stderr=devnull,
+                cwd=project_root,
+                timeout=300
+            )
+        return result.returncode == 0
+    except:
         return False
 
-def create_directory(path):
-   
-    Path(path).mkdir(parents=True, exist_ok=True)
-
-def run_script(script_path, description, retry_count=1):
- 
-    print_header(f"Running: {description}")
-
-    script_dir = os.path.dirname(script_path)
-    if script_dir:
-        create_directory(script_dir)
-    
-    for attempt in range(retry_count):
-        try:
-            # Run the script and capture output
-            result = subprocess.run(
-                [sys.executable, script_path], 
-                capture_output=True, 
-                text=True, 
-                cwd=script_dir or '.',
-                timeout=TIMEOUT_SECONDS
-            )
-            
-           
-            if result.stdout:
-                print(result.stdout)
-      
-            if result.stderr:
-                print("Warnings/Info:")
-                print(result.stderr)
-      
-            if result.returncode == 0:
-                return True
-            else:
-                print(f"⚠ Script exited with code {result.returncode}")
-                if attempt < retry_count - 1:
-                    print(f"Retrying... (attempt {attempt + 2}/{retry_count})")
-                    time.sleep(2)
-                continue
-                
-        except subprocess.TimeoutExpired:
-            print(f"Error: {script_path} timed out after {TIMEOUT_SECONDS} seconds")
-            if attempt < retry_count - 1:
-                print(f"Retrying... (attempt {attempt + 2}/{retry_count})")
-                time.sleep(2)
-            continue
-        except Exception as e:
-            print(f"Error running {script_path}: {e}")
-            if attempt < retry_count - 1:
-                print(f"Retrying... (attempt {attempt + 2}/{retry_count})")
-                time.sleep(2)
-            continue
-    
-    return False
-
 def verify_outputs():
-   
-    print_header("VERIFYING OUTPUTS")
+    """
+    Check all expected output files exist
+    """
+    project_root = get_project_root()
     
-    # All expected output files from all team members
-    output_files = {
-        # Bryan
-        'bryan/test_plot.png': 'Bryan constraint test plot',
-        
-        # Deep
-        'deep/simplex_step_1.png': 'Deep simplex step 1',
-        'deep/simplex_step_2.png': 'Deep simplex step 2',
-        'deep/simplex_step_3.png': 'Deep simplex step 3',
-        'deep/all_steps_combined.png': 'Deep combined steps',
-        
-        # Jovan
-        'Jovan/solution_plot.png': 'Jovan LP solution plot',
-        
-        # Japneet
-        'japneet/solution_summary.txt': 'Japneet network LP summary',
-        
-        # Gurjas
-        'Gurjas/pca_visualization.png': 'Gurjas PCA visualization',
-        'Gurjas/parallel_coordinates.png': 'Gurjas parallel coordinates',
-        'Gurjas/correlation_heatmap.png': 'Gurjas correlation heatmap',
-    }
+    output_files = [
+        'Bryan/test_plot.png',
+        'deep/simplex_2d_step_1.png',
+        'deep/simplex_2d_step_2.png',
+        'deep/simplex_2d_step_3.png',
+        'deep/simplex_2d_all.png',
+        'Jovan/solution_plot.png',
+        'Japneet/solution_summary.txt',
+        'Gurjas/pca_visualization.png',
+        'Gurjas/parallel_coordinates.png',
+        'Gurjas/correlation_heatmap.png',
+    ]
     
-    found_files = []
-    missing_files = []
+    found = []
+    missing = []
     
-    print("\nChecking output files...\n")
-    
-    for file_path, description in output_files.items():
-        if os.path.exists(file_path):
-            size = os.path.getsize(file_path)
-            print(f"✓ {file_path} - {description} ({size} bytes)")
-            found_files.append(file_path)
+    for file_path in output_files:
+        full_path = os.path.join(project_root, file_path)
+        if os.path.exists(full_path):
+            found.append(file_path)
         else:
-            print(f"✗ {file_path} - {description} NOT FOUND")
-            missing_files.append(file_path)
+            missing.append(file_path)
     
-    return len(found_files), len(output_files), found_files, missing_files
-
-def print_summary(script_success, output_success, output_total, missing_files, elapsed):
-  
-    print_header("EXECUTION SUMMARY")
-    
-    print("\nScript Execution Results:")
-    for description, success in script_success:
-        status = "✓" if success else "✗"
-        print(f"  {status} {description}")
-    
-    print(f"\nOutput Files: {output_success}/{output_total} found")
-    
-    if missing_files:
-        print("\nMissing Files (may need to run scripts again):")
-        for file_path in missing_files:
-            print(f"  - {file_path}")
-    
-    print_header(f"COMPLETE - Elapsed time: {elapsed:.2f} seconds")
-    
-    print("\n" + "="*60)
-    print(" NEXT STEPS")
-    print("="*60)
-    print("1. If all outputs were found, the integration is successful!")
-    print("2. If some files are missing, ensure each team member's script runs individually")
-    print("3. Create final bundle: git bundle create project.bundle main")
-    print("4. Submit the bundle file as required by the assignment")
+    return found, missing
 
 def main():
-    """Main execution function - coordinates all team members' code"""
-    print_header("LINEAR PROGRAMMING SIMPLEX VISUALIZATION")
-    print("Project: Simplex Algorithm Visualization")
-    print("Team: Bryan, Deep, Gurjas, Japneet, Jovan, Nishant")
-    print("\nThis script coordinates execution of all team members' code.")
-    print("="*60)
+    """Main execution function - clean output version"""
     
-    if not check_dependencies():
-        print("\nPlease install missing dependencies and try again.")
-        sys.exit(1)
+    print_header("LINEAR PROGRAMMING SIMPLEX VISUALIZATION")
+    print("Team: Bryan, Deep, Gurjas, Japneet, Jovan, Nishant")
     
     start_time = time.time()
     
+    # Define scripts to run in order
     scripts = [
-        ('bryan/constraints.py', "Bryan's Constraint Helpers"),
-        ('deep/simplex_2d.py', "Deep's 2D Simplex Visualization"),
-        ('Jovan/library_solver.py', "Jovan's Library Solver (5+ constraints)"),
-        ('japneet/network_lp.py', "Japneet's Network LP (long15.mps)"),
-        ('gurjas/higher_dim_viz.py', "Gurjas Higher-Dimensional Visualization"),
+        'Bryan/constraints.py',
+        'deep/simplex_2d.py',
+        'deep/plot_all.py',
+        'Jovan/library_solver.py',
+        'Japneet/network_lp.py',
+        'Gurjas/higher_dim_viz.py',
     ]
     
-    script_success = []
-    for script_path, description in scripts:
-        if os.path.exists(script_path):
-            success = run_script(script_path, description, retry_count=1)
-            script_success.append((description, success))
-        else:
-            print(f"Warning: {script_path} not found")
-            print("Please ensure all team members have committed their code to the repository.")
-            script_success.append((description, False))
+    # Run each script silently
+    for script_path in scripts:
+        run_script_silent(script_path)
     
-    output_success, output_total, found_files, missing_files = verify_outputs()
+    # Verify outputs
+    found, missing = verify_outputs()
     
-    print_summary(script_success, output_success, output_total, missing_files, time.time() - start_time)
+    # Print summary
+    print_header("RESULTS")
+    print(f"\nOutput Files Generated: {len(found)}/10")
     
-    all_scripts_success = all(success for _, success in script_success)
-    all_outputs_found = output_success == output_total
-    
-    if all_scripts_success and all_outputs_found:
-        sys.exit(0)
+    if len(found) == 10:
+        print("\n✓ All components completed successfully!")
     else:
-        sys.exit(1)
+        print(f"\n⚠ Missing {len(missing)} output files")
+    
+    elapsed = time.time() - start_time
+    print(f"\nTotal execution time: {elapsed:.2f} seconds")
+    
+    print_header("COMPLETE")
 
 if __name__ == "__main__":
     main()

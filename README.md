@@ -198,6 +198,10 @@ python3 Gurjas/higher_dim_viz.py
 * Mittelmann Benchmarks: [https://mattmilten.github.io/mittelmann-plots/](https://mattmilten.github.io/mittelmann-plots/)
 * Network LP Dataset: [https://plato.asu.edu/ftp/lptestset/network/](https://plato.asu.edu/ftp/lptestset/network/)
 
+### Resources
+
+* Cornell University Computational Optimization Open Textbook: [https://optimization.cbe.cornell.edu/index.php?title=Main_Page]
+
 ### AI Usage Disclosure
 
 This project used AI-assisted coding for:

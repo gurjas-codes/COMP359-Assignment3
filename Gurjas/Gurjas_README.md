@@ -1,6 +1,6 @@
 # Gurjas — Higher-Dimensional Visualization
 
-## 📁 Files
+##  Files
 
 - `Gurjas/higher_dim_viz.py` — Main script
 - `Gurjas/pca_visualization.png` — PCA projection of 5D feasible region
@@ -8,14 +8,14 @@
 - `Gurjas/correlation_heatmap.png` — Variable correlation heatmap
 - `Gurjas/network_variable_distribution.png` — Japneet's network LP sparsity analysis
 
-## 🛠 How to Run
+## How to Run
 
 ```bash
 pip install scikit-learn scipy numpy matplotlib
 python Gurjas/higher_dim_viz.py
 ```
 
-## 🐛 Issues & Debugging Log
+##  Issues & Debugging Log
 
 ### Issue 1: Rejection sampling was extremely slow
 When I first set up the feasible point sampler, I was generating random points across the full range `[0, 100]` for each variable. Almost none of them landed inside the polytope, so the script would hang trying to get 500 points. I fixed this by computing a tighter upper bound per variable using `b[i] / A[i,j]` so the random draws stay within a reasonable box. Went from ~500k attempts down to ~9k.
@@ -34,7 +34,7 @@ The `long15.mps` file is 3 million lines. Parsing the entire COLUMNS section too
 
 ---
 
-## 📚 References
+## References
 
 ### YouTube Videos
 
@@ -59,7 +59,7 @@ The `long15.mps` file is 3 million lines. Parsing the entire COLUMNS section too
 - Mittelmann, H. (2026).
   *Large Network-LP Benchmark (commercial vs free)*.
   🔗 https://plato.asu.edu/ftp/lptestset/network/
-  📊 Benchmark plots: https://mattmilten.github.io/mittelmann-plots/
+  Benchmark plots: https://mattmilten.github.io/mittelmann-plots/
 
 ### Software & Tools
 
@@ -89,7 +89,7 @@ The `long15.mps` file is 3 million lines. Parsing the entire COLUMNS section too
 
 ---
 
-## 🤖 AI Usage Disclosure
+## AI Usage Disclosure
 
 Claude (Anthropic) was used during development for:
 - Debugging the rejection sampling performance issue
